@@ -1,6 +1,9 @@
+// App.js
+
 import React, { useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import styled, { keyframes } from 'styled-components';
+import axios from 'axios';
 
 // Media queries for responsiveness
 const breakpoints = {
@@ -15,9 +18,11 @@ const moveTextRightToLeft = keyframes`
   100% { transform: translateX(-100%); }
 `;
 
+// Styled Components
+
 // MovingText styled component
 const MovingText = styled.p`
-  animation: ${moveTextRightToLeft} 10s linear infinite; /* Increased speed */
+  animation: ${moveTextRightToLeft} 10s linear infinite;
   white-space: nowrap;
   color: #4a4e69;
   font-size: 1.2rem;
@@ -294,7 +299,7 @@ const clusterImages = {
 };
 
 // Initial state for clusters (empty array as we'll fetch from API)
-const initialClusters = []; // Removed dummy data
+const initialClusters = [];
 
 function App() {
   const { getRootProps, getInputProps } = useDropzone({
@@ -325,26 +330,22 @@ function App() {
 
       // Prepare form data
       const formData = new FormData();
-      formData.append('file', uploadedFile); // Ensure 'file' matches API's expected key
+      formData.append('files', uploadedFile); // Ensure 'file' matches API's expected key
 
       try {
-        const response = await fetch('https://cluster-poc-4ba2ee28df2f.herokuapp.com//cluster-documents/', {
-          method: 'POST',
-          body: formData,
-        });
+        const response = await axios.post(
+          'https://cluster-poc-4ba2ee28df2f.herokuapp.com/cluster-documents/', // Corrected URL
+          formData,
+          {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+          }
+        );
 
-        // Attempt to parse JSON, handle non-JSON responses
-        const responseData = await response.json().catch(() => null);
+        const responseData = response.data;
 
-        if (!response.ok) {
-          // If response is not ok, throw an error with the message from the server
-          const errorMessage = responseData && responseData.message
-            ? responseData.message
-            : 'Unprocessable Entity';
-          throw new Error(errorMessage);
-        }
-
-        // Assuming the API returns an array of clusters
+        // Check if responseData is an array
         if (!Array.isArray(responseData)) {
           throw new Error('Unexpected response format');
         }
@@ -353,7 +354,14 @@ function App() {
         setSelectedCount(responseData.length); // Automatically display all clusters
       } catch (err) {
         console.error('Error details:', err);
-        setError(`Failed to fetch clusters: ${err.message}`);
+        // Check if the error has a response from the server
+        if (err.response && err.response.data && err.response.data.message) {
+          setError(`Failed to fetch clusters: ${err.response.data.message}`);
+        } else if (err.message) {
+          setError(`Failed to fetch clusters: ${err.message}`);
+        } else {
+          setError('Failed to fetch clusters: An unknown error occurred.');
+        }
       } finally {
         setLoading(false);
       }
@@ -393,7 +401,7 @@ function App() {
           <LineInput
             type="number"
             value={selectedCount}
-            min="0+"
+            min="0"
             onChange={handleLineInputChange}
           />
         </NumberInputContainer>
@@ -436,7 +444,7 @@ function App() {
                 {clusters.slice(0, selectedCount).map((cluster) => (
                   <ClusterImage
                     key={cluster.id}
-                    style={{ backgroundImage: `url(${clusterImages[cluster.id]})` }}
+                    style={{ backgroundImage: `url(${clusterImages[cluster.id] || 'https://via.placeholder.com/400?text=No+Image'})` }}
                   />
                 ))}
               </ClusterImageContainer>
