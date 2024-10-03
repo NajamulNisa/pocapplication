@@ -1,5 +1,3 @@
-// App.js
-
 import React, { useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import styled, { keyframes } from 'styled-components';
@@ -305,111 +303,57 @@ function App() {
   const { getRootProps, getInputProps } = useDropzone({
     accept: 'application/pdf',
     onDrop: async (acceptedFiles) => {
-      if (acceptedFiles.length === 0) return;
+      if (acceptedFiles.length > 0) {
+        const file = acceptedFiles[0];
+        setFileName(file.name);
+        
+        // Replace this URL with your actual API endpoint
+        const formData = new FormData();
+        formData.append('files', file);
 
-      const uploadedFile = acceptedFiles[0];
-
-      // Validate file type
-      if (uploadedFile.type !== 'application/pdf') {
-        setError('Only PDF files are allowed.');
-        return;
-      }
-
-      // Validate file size (e.g., max 5MB)
-      const maxSize = 5 * 1024 * 1024; // 5MB
-      if (uploadedFile.size > maxSize) {
-        setError('File size exceeds 5MB.');
-        return;
-      }
-
-      setFilename(uploadedFile.name);
-      setSelectedCount(0); // Reset cluster count
-      setClusters([]); // Clear previous clusters
-      setError(null); // Clear previous errors
-      setLoading(true); // Set loading state
-
-      // Prepare form data
-      const formData = new FormData();
-      formData.append('files', uploadedFile); // Ensure 'file' matches API's expected key
-
-      try {
-        const response = await axios.post(
-          'https://cluster-poc-4ba2ee28df2f.herokuapp.com/cluster-documents/', // Corrected URL
-          formData,
-          {
+        try {
+          const response = await axios.post('https://cluster-poc-4ba2ee28df2f.herokuapp.com/cluster-documents/', formData, {
             headers: {
               'Content-Type': 'multipart/form-data',
             },
-          }
-        );
+          });
 
-        const responseData = response.data;
-
-        // Check if responseData is an array
-        if (!Array.isArray(responseData)) {
-          throw new Error('Unexpected response format');
+          // Assuming your API response contains cluster data
+          const clustersData = response.data.clusters; // Adjust based on actual response structure
+          setClusters(clustersData);
+          setNumberOfClusters(clustersData.length);
+        } catch (error) {
+          console.error('Error uploading file:', error);
         }
-
-        setClusters(responseData);
-        setSelectedCount(responseData.length); // Automatically display all clusters
-      } catch (err) {
-        console.error('Error details:', err);
-        // Check if the error has a response from the server
-        if (err.response && err.response.data && err.response.data.message) {
-          setError(`Failed to fetch clusters: ${err.response.data.message}`);
-        } else if (err.message) {
-          setError(`Failed to fetch clusters: ${err.message}`);
-        } else {
-          setError('Failed to fetch clusters: An unknown error occurred.');
-        }
-      } finally {
-        setLoading(false);
       }
     },
   });
 
+  // State hooks for file name and clusters
+  const [fileName, setFileName] = useState('');
   const [clusters, setClusters] = useState(initialClusters);
-  const [selectedCount, setSelectedCount] = useState(0);
-  const [filename, setFilename] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const handleLineInputChange = (e) => {
-    const value = parseInt(e.target.value, 10);
-    if (isNaN(value) || value < 0) {
-      setSelectedCount(0);
-    } else {
-      setSelectedCount(value);
-    }
-  };
+  const [numberOfClusters, setNumberOfClusters] = useState(0);
 
   return (
     <Container>
       <Sidebar>
-        <h1>PDF Cluster Tool</h1>
-
         <UploadContainer {...getRootProps()}>
           <input {...getInputProps()} />
           <p>Drag & drop a PDF file here, or click to select one</p>
-          <UploadButton>Browse Files</UploadButton>
+          <UploadButton>Upload PDF</UploadButton>
+          {fileName && <FilenameDisplay>Selected file: {fileName}</FilenameDisplay>}
         </UploadContainer>
-
-        {filename && <FilenameDisplay>Selected file: {filename}</FilenameDisplay>}
-
         <NumberInputContainer>
           <InputHeading>How many clusters to display?</InputHeading>
           <LineInput
             type="number"
-            value={selectedCount}
             min="0"
-            onChange={handleLineInputChange}
+            max={numberOfClusters}
+            value={numberOfClusters}
+            onChange={(e) => setNumberOfClusters(Number(e.target.value))}
           />
         </NumberInputContainer>
-
-        {loading && <FilenameDisplay>Loading clusters...</FilenameDisplay>}
-        {error && <FilenameDisplay style={{ color: 'red' }}>{error}</FilenameDisplay>}
       </Sidebar>
-
       <MainContent>
         <MovingText>
           "POC" commonly stands for Proof of Concept, a demonstration to
@@ -417,38 +361,35 @@ function App() {
           testing at the patient’s location; or Person of Color, referring to
           non-white individuals in social contexts.
         </MovingText>
-
         <ContentWrapper>
-          <ClusterContainer>
-            {selectedCount > 0 ? (
-              <>
-                <ClusterTitle>Clusters</ClusterTitle>
-                {clusters.slice(0, selectedCount).map((cluster) => (
-                  <ClusterList key={cluster.id}>
-                    <strong>{cluster.name}</strong>
-                    <p>{cluster.description}</p>
-                  </ClusterList>
+          {numberOfClusters === 0 ? (
+            <NoClustersMessage>
+              📄 OOPS, No clusters available. Please upload a PDF.
+            </NoClustersMessage>
+          ) : (
+            <ClusterContainer>
+              <ClusterTitle>Clusters</ClusterTitle>
+              <ClusterList>
+                {clusters.slice(0, numberOfClusters).map((cluster, index) => (
+                  <div key={index}>
+                    <h2>{cluster.title || `Cluster ${index + 1}`}</h2>
+                    <p>{cluster.description || 'Description of the cluster.'}</p>
+                    <p><strong>Topics:</strong> {cluster.topics.join(', ') || 'No topics available.'}</p>
+                  </div>
                 ))}
-              </>
-            ) : (
-              <NoClustersMessage>
-                🙁 OOPS! No clusters available. Please upload a PDF.
-              </NoClustersMessage>
-            )}
-          </ClusterContainer>
-
-          {selectedCount > 0 && (
-            <>
+              </ClusterList>
               <ImageHeading>Images</ImageHeading>
               <ClusterImageContainer>
-                {clusters.slice(0, selectedCount).map((cluster) => (
+                {clusters.slice(0, numberOfClusters).map((cluster, index) => (
                   <ClusterImage
-                    key={cluster.id}
-                    style={{ backgroundImage: `url(${clusterImages[cluster.id] || 'https://via.placeholder.com/400?text=No+Image'})` }}
+                    key={index}
+                    style={{
+                      backgroundImage: `url(${clusterImages[index + 1] || ''})`,
+                    }}
                   />
                 ))}
               </ClusterImageContainer>
-            </>
+            </ClusterContainer>
           )}
         </ContentWrapper>
       </MainContent>
